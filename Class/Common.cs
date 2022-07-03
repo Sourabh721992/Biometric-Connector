@@ -80,7 +80,8 @@ namespace UserInfo.Class
             }
             catch(Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                //Console.WriteLine(ex.Message);
+                MessageBox.Show(ex.Message);
                 return "";
             }
         }

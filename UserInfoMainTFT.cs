@@ -15,8 +15,10 @@ namespace UserInfo
     {
         public TFT()
         {
+
             InitializeComponent();
 
+            ///MessageBox.Show("Request you to provide device name, model, ip and, port", "Error");
             //MessageBox.Show("Loading useful information. Request you to wait.", "Info");
             //Check whether the license of the organisation is expired or not.
             //If expired, show the message and ask them to renew it.
@@ -29,9 +31,9 @@ namespace UserInfo
                 string strFetchedMsg = "";
                 Boolean isFetched = APILayer.GetAddedDevices(out strFetchedMsg);
 
-                if(isFetched)
+                if (isFetched)
                 {
-                    if(!String.IsNullOrEmpty(strFetchedMsg))
+                    if (!String.IsNullOrEmpty(strFetchedMsg))
                         CloseApplication(strFetchedMsg);
                     else
                     {
@@ -40,7 +42,7 @@ namespace UserInfo
 
                         //Getting Added users for the gym.
                         string strUserMsg = "";
-                        if(APILayer.GetAddedUsers(out strUserMsg))
+                        if (APILayer.GetAddedUsers(out strUserMsg))
                         {
                             isUserFetchedFromDB = true;
                             BindUsersGridView();
@@ -82,13 +84,13 @@ namespace UserInfo
 
                 //There will be the thread that will validate system datetime with sever datetime.
                 //In case of difference greater than 5 mins, it will close the application
-                Thread thDateTime = new Thread(new ThreadStart(ValidateSystemDateTime));
-                thDateTime.IsBackground = true;
-                thDateTime.Start();
+                //Thread thDateTime = new Thread(new ThreadStart(ValidateSystemDateTime));
+                //thDateTime.IsBackground = true;
+                //thDateTime.Start();
 
                 Common.ResizeGridView(gridviewDevices);
                 Common.ResizeGridView(gridviewUsers);
-                
+
             }
             else
             {
@@ -128,7 +130,7 @@ namespace UserInfo
 
                     //If the difference between Expiry Date and todays date is 15 days,
                     //make licence label as red
-                    if((Convert.ToDateTime(DS.DS.gymObj.expiryDt) - dtCurrent).Days <= 15)
+                    if ((Convert.ToDateTime(DS.DS.gymObj.expiryDt) - dtCurrent).Days <= 15)
                     {
                         lblLicenseValidVal.ForeColor = Color.Red;
                     }
@@ -139,7 +141,7 @@ namespace UserInfo
                         //Logic for validate customers and gym license -- start
                         validateGym = APILayer.ValidateLicenseKey(out strValidateGym);
                     }
-                    if(validateGym)
+                    if (validateGym)
                     {
                         //Gym is validated. Now validate the customers
 
@@ -148,25 +150,26 @@ namespace UserInfo
 
                         lock (dicUserLock)
                         {
-                            dicUserCopy = DS.DS.dicUsers;
+                            foreach (KeyValuePair<int, DS.User> user in DS.DS.dicUsers)
+                            {
+                                dicUserCopy.Add(user.Key, user.Value);
+                            }
                         }
-                            //Loop through customers and check for validity.
-                        foreach(KeyValuePair<int, DS.User> user in dicUserCopy)
+                        foreach (KeyValuePair<int, DS.User> user in dicUserCopy)
                         {
                             //Check for the users with the expiry date.
-                            if((dtCurrent - Convert.ToDateTime(user.Value.expiryDt)).TotalHours > 24)
+                            if ((dtCurrent - Convert.ToDateTime(user.Value.expiryDt)).TotalHours > 24)
                             {
                                 //Check the user has access to gym or not. In case he has access to gym remove him.
-                                if(user.Value.inDevice != 0)
+                                if (user.Value.inDevice != 0)
                                 {
                                     removeUser = true;
                                     //Check for the user before expiry it.. Checks his expiry has been extended or not
                                     validateCustomers = APILayer.ValidateUser(out strValidateCustomer, user.Value.id);
-                                    
-                                    if(validateCustomers)
+                                    if (validateCustomers)
                                     {
                                         //Check for his new expiry date
-                                        lock(dicUserLock)
+                                        lock (dicUserLock)
                                         {
                                             if ((dtCurrent - Convert.ToDateTime(DS.DS.dicUsers[user.Value.id].expiryDt)).TotalHours > 24)
                                             {
@@ -179,45 +182,66 @@ namespace UserInfo
 
                                     if (removeUser)
                                     {
-                                        //Remove user from device
-                                        Cursor = Cursors.WaitCursor;
-                                        axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);//disable the device
-                                        if (axCZKEM1.SSR_DeleteEnrollData(DS.DS.lstDevices[0].id, user.Value.id.ToString(), 12))
+                                        foreach (DS.Device device in DS.DS.lstDevices)
                                         {
-                                            axCZKEM1.RefreshData(DS.DS.lstDevices[0].id);//the data in the device should be refreshed
+                                            //Remove user from device
+                                            Cursor = Cursors.WaitCursor;
+                                            axCZKEM1.EnableDevice(device.id, false);//disable the device
+                                            if (axCZKEM1.SSR_EnableUser(device.id, user.Value.id.ToString(), false))
+                                            {
+                                                axCZKEM1.RefreshData(device.id);//the data in the device should be refreshed
+                                            }
+                                            else
+                                            {
+                                                int errorCode = -1;
+                                                axCZKEM1.GetLastError(ref errorCode);
+                                            }
+                                            axCZKEM1.EnableDevice(device.id, true);//enable the device
+                                            Cursor = Cursors.Default;
                                         }
-                                        else
-                                        {
-                                            int errorCode = -1;
-                                            axCZKEM1.GetLastError(ref errorCode);
-                                        }
-                                        axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, true);//enable the device
-                                        Cursor = Cursors.Default;
 
                                         //Reset value in ,main dictionary and local copy
                                         lock (dicUserLock)
                                         {
-                                            DS.DS.dicUsers[user.Value.id].inDevice = 0;
+                                            DS.DS.dicUsers[user.Value.id].inDevice = 1;
                                             DS.DS.dicUsers[user.Value.id].enabled = 0;
-                                            user.Value.inDevice = 0;
+                                            user.Value.inDevice = 1;
                                             user.Value.enabled = 0;
                                         }
 
                                         //Update in API
                                         APILayer.UpdateUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.Value.id, userName: user.Value.name, userType: user.Value.type,
-                                                                inDevice: user.Value.inDevice, expiryDt: user.Value.expiryDt, dt: user.Value.date, 
+                                                                inDevice: user.Value.inDevice, expiryDt: user.Value.expiryDt, dt: user.Value.date,
                                                                 enabled: user.Value.enabled);
+                                        //Bind Users Gridview
+                                        //BindUsersGridView();
 
                                     }
+                                }
+                                else
+                                {
+                                    lock (dicUserLock)
+                                    {
+                                        DS.DS.dicUsers[user.Value.id].inDevice = 0;
+                                        DS.DS.dicUsers[user.Value.id].enabled = 0;
+                                        user.Value.inDevice = 0;
+                                        user.Value.enabled = 0;
+                                    }
 
+                                    //Update in API
+                                    APILayer.UpdateUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.Value.id, userName: user.Value.name, userType: user.Value.type,
+                                                            inDevice: user.Value.inDevice, expiryDt: user.Value.expiryDt, dt: user.Value.date,
+                                                            enabled: user.Value.enabled);
                                     //Bind Users Gridview
-                                    BindUsersGridView();
+                                    // BindUsersGridView();
                                 }
                             }
                         }
 
+                        //Bind Users Gridview
+                        BindUsersGridView();
                         //Clear local dictionary to tell GC to collect it.
-                        dicUserCopy = null;
+                        // dicUserCopy = null;
                     }
                     else
                     {
@@ -233,7 +257,7 @@ namespace UserInfo
             }
             catch (Exception ex)
             {
-
+                MessageBox.Show(ex.Message);
             }
         }
 
@@ -243,7 +267,7 @@ namespace UserInfo
         {
             try
             {
-                DateTime dtLastCurrentDateFetched = System.DateTime.MinValue; 
+                DateTime dtLastCurrentDateFetched = System.DateTime.MinValue;
                 while (true)
                 {
                     dtLastCurrentDateFetched = APILayer.GetCurrentDateTime(); //The datetime value will be used to sync system date with the server date.
@@ -328,9 +352,9 @@ namespace UserInfo
         {
             try
             {
-                if(DS.DS.lstDevices.Count > 0)
+                if (DS.DS.lstDevices.Count > 0)
                 {
-                    foreach (DS.Device device in DS.DS.lstDevices) 
+                    foreach (DS.Device device in DS.DS.lstDevices)
                     {
                         Boolean isConnected = false;
                         //Try to connect with devices.
@@ -356,7 +380,7 @@ namespace UserInfo
                             {
                                 int errorCode = -1;
                                 axCZKEM1.GetLastError(ref errorCode);
-                                MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
+                                MessageBox.Show("Error Message: " + errorCode.ToString() + "." + Environment.NewLine + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
                                                 "Request you to take necessary steps and try in sometime.", "Error");
                             }
                         }
@@ -365,7 +389,7 @@ namespace UserInfo
                 //Bind the devices gridview
                 BindDevicesGridView();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
 
             }
@@ -486,74 +510,77 @@ namespace UserInfo
         {
             try
             {
-                //Check Device is connected or not 
-                if (DS.DS.lstDevices[0].status == Common.deviceConnected)
+                foreach (DS.Device device in DS.DS.lstDevices)
                 {
-                    string sdwEnrollNumber = "";
-                    int idwVerifyMode = 0;
-                    int idwInOutMode = 0;
-                    int idwYear = 0;
-                    int idwMonth = 0;
-                    int idwDay = 0;
-                    int idwHour = 0;
-                    int idwMinute = 0;
-                    int idwSecond = 0;
-                    int idwWorkcode = 0;
-                    int idwErrorCode = 0;
-                    int iGLCount = 0;
-                    int iIndex = 0;
-                    DateTime dt = System.DateTime.MinValue;
-
-                    Cursor = Cursors.WaitCursor;
-
-                    axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);//disable the device
-                    if (axCZKEM1.ReadGeneralLogData(DS.DS.lstDevices[0].id))//read all the attendance records to the memory
+                    //Check Device is connected or not 
+                    if (device.status == Common.deviceConnected)
                     {
-                        while (axCZKEM1.SSR_GetGeneralLogData(DS.DS.lstDevices[0].id, out sdwEnrollNumber, out idwVerifyMode,
-                                                              out idwInOutMode, out idwYear, out idwMonth, out idwDay, out idwHour, 
-                                                              out idwMinute, out idwSecond, ref idwWorkcode))//get records from the memory
+                        string sdwEnrollNumber = "";
+                        int idwVerifyMode = 0;
+                        int idwInOutMode = 0;
+                        int idwYear = 0;
+                        int idwMonth = 0;
+                        int idwDay = 0;
+                        int idwHour = 0;
+                        int idwMinute = 0;
+                        int idwSecond = 0;
+                        int idwWorkcode = 0;
+                        int idwErrorCode = 0;
+                        int iGLCount = 0;
+                        int iIndex = 0;
+                        DateTime dt = System.DateTime.MinValue;
+
+                        Cursor = Cursors.WaitCursor;
+
+                        axCZKEM1.EnableDevice(device.id, false);//disable the device
+                        if (axCZKEM1.ReadGeneralLogData(device.id))//read all the attendance records to the memory
                         {
-                            iGLCount++;
-
-                            //Store the real time attendance information in the list
-                            DS.AttendanceInfo attendanceInfo = new DS.AttendanceInfo();
-                            attendanceInfo.uid = Convert.ToInt32(sdwEnrollNumber);
-                            attendanceInfo.time = idwYear.ToString() + "-" + idwMonth.ToString() + "-" + idwDay.ToString() + " " +
-                                                  idwHour.ToString() + ":" + idwMinute.ToString() + ":" + idwSecond.ToString();
-
-                            dt = new DateTime(idwYear, idwMonth, idwDay, idwHour, idwMinute, idwSecond);
-
-                            if (dt >= dtLastAttendanceSync)
+                            while (axCZKEM1.SSR_GetGeneralLogData(device.id, out sdwEnrollNumber, out idwVerifyMode,
+                                                                  out idwInOutMode, out idwYear, out idwMonth, out idwDay, out idwHour,
+                                                                  out idwMinute, out idwSecond, ref idwWorkcode))//get records from the memory
                             {
-                                //Log attendance in List
-                                lock (listAttendanceLock)
+                                iGLCount++;
+
+                                //Store the real time attendance information in the list
+                                DS.AttendanceInfo attendanceInfo = new DS.AttendanceInfo();
+                                attendanceInfo.uid = Convert.ToInt32(sdwEnrollNumber);
+                                attendanceInfo.time = idwYear.ToString() + "-" + idwMonth.ToString() + "-" + idwDay.ToString() + " " +
+                                                      idwHour.ToString() + ":" + idwMinute.ToString() + ":" + idwSecond.ToString();
+
+                                dt = new DateTime(idwYear, idwMonth, idwDay, idwHour, idwMinute, idwSecond);
+
+                                if (dt >= dtLastAttendanceSync)
                                 {
-                                    DS.DS.lstAttendance.Add(attendanceInfo);
+                                    //Log attendance in List
+                                    lock (listAttendanceLock)
+                                    {
+                                        DS.DS.lstAttendance.Add(attendanceInfo);
+                                    }
                                 }
+
+                                iIndex++;
                             }
-
-                            iIndex++;
-                        }
-                    }
-                    else
-                    {
-                        Cursor = Cursors.Default;
-                        axCZKEM1.GetLastError(ref idwErrorCode);
-
-                        if (idwErrorCode != 0)
-                        {
-                           
                         }
                         else
                         {
-                           
+                            Cursor = Cursors.Default;
+                            axCZKEM1.GetLastError(ref idwErrorCode);
+
+                            if (idwErrorCode != 0)
+                            {
+
+                            }
+                            else
+                            {
+
+                            }
                         }
+                        axCZKEM1.EnableDevice(device.id, true);//enable the device
+                        Cursor = Cursors.Default;
                     }
-                    axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, true);//enable the device
-                    Cursor = Cursors.Default;
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
 
             }
@@ -617,7 +644,7 @@ namespace UserInfo
         //            this.axCZKEM1.OnWriteCard += new zkemkeeper._IZKEMEvents_OnWriteCardEventHandler(axCZKEM1_OnWriteCard);
         //            this.axCZKEM1.OnEmptyCard += new zkemkeeper._IZKEMEvents_OnEmptyCardEventHandler(axCZKEM1_OnEmptyCard);
         //        } 
-                
+
         //        MyCount = 1;
         //    }
         //    else
@@ -794,7 +821,7 @@ namespace UserInfo
         private void btnDownloadTmp_Click(object sender, EventArgs e)
         {
             MessageBox.Show(iMachineNumber.ToString());
-           
+
             if (bIsConnected == false)
             {
                 MessageBox.Show("Please connect the device first!", "Error");
@@ -813,15 +840,15 @@ namespace UserInfo
 
             //string serialNo = "";
             //axCZKEM1.GetSerialNumber(iMachineNumber, out serialNo);// serial no of machine
-                      
+
             lvDownload.Items.Clear();
             lvDownload.BeginUpdate();
-            
+
             axCZKEM1.EnableDevice(iMachineNumber, false);
             Cursor = Cursors.WaitCursor;
 
             axCZKEM1.ReadAllUserID(iMachineNumber);//read all the user information to the memory
-        
+
             axCZKEM1.IsTFTMachine(iMachineNumber);   // to distingush machines
 
             axCZKEM1.ReadAllTemplate(iMachineNumber);//read all the users' fingerprint templates to the memory
@@ -868,7 +895,7 @@ namespace UserInfo
                 MessageBox.Show("Please connect the device first!", "Error");
                 return;
             }
-                       
+
             if (lvDownload.Items.Count == 0)
             {
                 MessageBox.Show("There is no data to upload!", "Error");
@@ -900,7 +927,7 @@ namespace UserInfo
                     iPrivilege = Convert.ToInt32(lvDownload.Items[i].SubItems[4].Text);
                     sPassword = lvDownload.Items[i].SubItems[5].Text;
                     sEnabled = lvDownload.Items[i].SubItems[6].Text;
-                    iFlag=Convert.ToInt32(lvDownload.Items[i].SubItems[7].Text);
+                    iFlag = Convert.ToInt32(lvDownload.Items[i].SubItems[7].Text);
 
                     if (sEnabled == "true")
                     {
@@ -930,7 +957,7 @@ namespace UserInfo
                         axCZKEM1.SetUserTmpExStr(iMachineNumber, sdwEnrollNumber, idwFingerIndex, iFlag, sTmpData);
                     }
                     sLastEnrollNumber = sdwEnrollNumber;//change the value of iLastEnrollNumber dynamicly
-                }                              
+                }
             }
             axCZKEM1.BatchUpdate(iMachineNumber);//upload all the information in the memory
             axCZKEM1.RefreshData(iMachineNumber);//the data in the device should be refreshed
@@ -1027,7 +1054,7 @@ namespace UserInfo
             {
                 axCZKEM1.RefreshData(iMachineNumber);//the data in the device should be refreshed
                 MessageBox.Show("Clear all the UserInfo data!", "Success");
-               
+
             }
             else
             {
@@ -1086,7 +1113,7 @@ namespace UserInfo
             {
                 axCZKEM1.RefreshData(iMachineNumber);//the data in the device should be refreshed
                 MessageBox.Show("Successfully clear administrator privilege from teiminal!", "Success");
-               
+
             }
             else
             {
@@ -1135,7 +1162,7 @@ namespace UserInfo
             }
         }
 
-        
+
         #endregion
         #region Ms-Access Database
 
@@ -1397,7 +1424,7 @@ namespace UserInfo
         * Here is part of the real time events, more pls refer to the RTEvents demo                       *
         * *************************************************************************************************/
         #region RealTime Events
-       
+
         //When you have enrolled a new user,this event will be triggered.
         private void axCZKEM1_OnNewUser(int iEnrollNumber)
         {
@@ -1457,7 +1484,7 @@ namespace UserInfo
             }
         }
 
-        
+
         //After function GetRTLog() is called ,RealTime Events will be triggered. 
         //When you are using these two functions, it will request data from the device forwardly.
         private void rtTimer_Tick(object sender, EventArgs e)
@@ -1475,7 +1502,7 @@ namespace UserInfo
         #endregion
 
         #region Card Operation
-      
+
         private void btnGetHIDEventCardNumAsStr_Click(object sender, EventArgs e)
         {
             if (bIsConnected == false)
@@ -1509,7 +1536,7 @@ namespace UserInfo
                 MessageBox.Show("Please connect the device first!", "Error");
                 return;
             }
-                        
+
             string sdwEnrollNumber = "";
             string sName = "";
             string sPassword = "";
@@ -1603,7 +1630,7 @@ namespace UserInfo
         //The function will be used to add new Devices in the System.
         private void btnAddNewDevice_Click(object sender, EventArgs e)
         {
-            if (DS.DS.lstDevices.Count < 1)
+            //if (DS.DS.lstDevices.Count < 1)
             {
                 if (txtDeviceName.Text != "" && txtDeviceModel.Text != "" && txtDeviceIP.Text != "" && txtDevicePort.Text != "")
                 {
@@ -1616,18 +1643,18 @@ namespace UserInfo
                     }
                     else
                     {
-                        string resMsg = "";
+                        string resMsg = ""; int serverDeviceId = -1;
 
                         string date = System.DateTime.Now.ToString("dd-MM-yyyy HH:mm:ss");
 
-                        Boolean isAdded = APILayer.AddNewDevices(out resMsg, DS.DS.gymObj.gymId, deviceId, txtDeviceName.Text,
+                        Boolean isAdded = APILayer.AddNewDevices(out resMsg, out serverDeviceId, DS.DS.gymObj.gymId, deviceId, txtDeviceName.Text,
                                                                 txtDeviceModel.Text, txtDeviceIP.Text, txtDevicePort.Text, date);
                         if (isAdded)
                         {
                             MessageBox.Show("Device has been added successfully", "Success");
                             //Add device in the list
                             DS.Device device = new DS.Device();
-                            device.id = deviceId;
+                            device.id = serverDeviceId;
                             device.name = txtDeviceName.Text;
                             device.model = txtDeviceModel.Text;
                             device.ip = txtDeviceIP.Text;
@@ -1656,10 +1683,10 @@ namespace UserInfo
                     MessageBox.Show("Request you to provide device name, model, ip and, port", "Error");
                 }
             }
-            else
-            {
-                MessageBox.Show("Right now you cannot add more than one device.", "Info");
-            }
+            //else
+            //{
+            //    MessageBox.Show("Right now you cannot add more than one device.", "Info");
+            //}
         }
 
         //The function will be used to delete the device.
@@ -1670,7 +1697,7 @@ namespace UserInfo
                 string resMsg = "";
                 Boolean isDeleted = APILayer.DeleteDevice(out resMsg, DS.DS.gymObj.gymId, deviceId);
 
-                if(isDeleted)
+                if (isDeleted)
                 {
                     MessageBox.Show("Device has been deleted successfully", "Success");
 
@@ -1787,7 +1814,7 @@ namespace UserInfo
         //Reseting controls on tab change.
         private void tab_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if(tab.SelectedIndex == 0)
+            if (tab.SelectedIndex == 0)
             {
                 //Reset textbox values
                 txtDeviceModel.Clear();
@@ -1796,15 +1823,16 @@ namespace UserInfo
                 txtDevicePort.Clear();
                 gridviewDevices.ClearSelection();
             }
-            else if (tab.SelectedIndex == 1) {
+            else if (tab.SelectedIndex == 1)
+            {
                 //Check if user if coming to this tab for first time.
-                if(!isUserFetchedFromDB)
+                if (!isUserFetchedFromDB)
                 {
                     MessageBox.Show("Fetching Added Users for Database. Request you to wait.", "Info");
                     //Fecth User database.
                     string resMsg = "";
-                    if(APILayer.GetAddedUsers(out resMsg))
-                    { 
+                    if (APILayer.GetAddedUsers(out resMsg))
+                    {
                         BindUsersGridView();
                     }
                     else
@@ -1829,65 +1857,83 @@ namespace UserInfo
             {
                 if (txtUserId.Text != "")
                 {
-                    string resMsg = ""; string userName = "";
+                    string resMsg = "";
+
                     //Check if the user is already added in the system or not
-                    lock(dicUserLock) 
+                    lock (dicUserLock)
                     {
-                        if(DS.DS.dicUsers.ContainsKey(Convert.ToInt32(txtUserId.Text)))
+                        if (DS.DS.dicUsers.ContainsKey(Convert.ToInt32(txtUserId.Text)))
                         {
                             MessageBox.Show("User is already added in the system.", "Error");
                             return;
                         }
                     }
+
                     Boolean isAdded = APILayer.ValidateUser(out resMsg, Convert.ToInt32(txtUserId.Text));
                     if (isAdded)
                     {
-                        MessageBox.Show("User has been added successfully.", "Success");
-                        lock (dicUserLock)
+                        bool addedInAtleastOneDevice = false;
+                        foreach (DS.Device device in DS.DS.lstDevices)
                         {
-                            userName = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].name;
+                            string userName = "";
+
+                            //MessageBox.Show("User has been added successfully.", "Success");
+                            lock (dicUserLock)
+                            {
+                                userName = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].name;
+                            }
+                            //Add the user in the device
+                            Cursor = Cursors.WaitCursor;
+                            axCZKEM1.EnableDevice(device.id, false);
+                            if (axCZKEM1.SSR_SetUserInfo(device.id, txtUserId.Text,
+                                                            userName, "", 0, true))//upload the user's information(card number included)
+                            {
+                                addedInAtleastOneDevice = true;
+                            }
+                            else
+                            {
+                                int errorCode = -1;
+                                axCZKEM1.GetLastError(ref errorCode);
+                                MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
+                                                "Request you to take necessary steps and try in sometime.", "Error");
+                            }
+                            axCZKEM1.RefreshData(device.id);//the data in the device should be refreshed
+                            axCZKEM1.EnableDevice(iMachineNumber, true);
+                            Cursor = Cursors.Default;
                         }
-                        //Add the user in the device
-                        Cursor = Cursors.WaitCursor;
-                        axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);
-                        if (axCZKEM1.SSR_SetUserInfo(DS.DS.lstDevices[0].id,txtUserId.Text,
-                                                     userName, "", 0, true))//upload the user's information(card number included)
+
+                        if (addedInAtleastOneDevice)
                         {
                             lock (dicUserLock)
                             {
                                 DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].inDevice = 1;
+                                DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].enabled = 1;
                             }
-                        }
-                        else
-                        {
-                            int errorCode = -1;
-                            axCZKEM1.GetLastError(ref errorCode);
-                            MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
-                                            "Request you to take necessary steps and try in sometime.", "Error");
-                        }
-                        axCZKEM1.RefreshData(DS.DS.lstDevices[0].id);//the data in the device should be refreshed
-                        axCZKEM1.EnableDevice(iMachineNumber, true);
-                        Cursor = Cursors.Default;
 
-                        //Add the user in the database
-                        DS.User user = new DS.User();
-                        lock (dicUserLock)
-                        {
-                            user = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)];
+                            //Add the user in the database
+                            DS.User user = new DS.User();
+                            lock (dicUserLock)
+                            {
+                                user = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)];
+                            }
+                            APILayer.AddUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.id, userName: user.name, userType: user.type,
+                                                 inDevice: user.inDevice, expiryDt: user.expiryDt, dt: user.date, enabled: user.enabled);
+
+                            //Add the user in the userList
+                            BindUsersGridView();
+
+                            //Reset textboax field
+                            txtUserId.Clear();
+
+                            MessageBox.Show("User added in atleast one device", "Success");
                         }
-                        APILayer.AddUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.id, userName: user.name, userType: user.type,
-                                     inDevice: user.inDevice, expiryDt: user.expiryDt, dt: user.date, enabled: user.enabled);
-
-                        //Add the user in the userList
-                        BindUsersGridView();
-
-                        //Reset textboax field
-                        txtUserId.Clear();
                     }
                     else
                     {
-                        MessageBox.Show(resMsg,"Error");
+                        MessageBox.Show(resMsg, "Error");
                     }
+
+
                 }
                 else
                 {
@@ -1895,7 +1941,7 @@ namespace UserInfo
                 }
 
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 MessageBox.Show(Common.errorMsg, "Error");
             }
@@ -1915,121 +1961,166 @@ namespace UserInfo
 
         private void btnAddAccess_Click(object sender, EventArgs e)
         {
-            if(DS.DS.lstDevices[0].status == Common.deviceDisconnected)
-            {
-                MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
-                return;
-            }
-            if(String.IsNullOrEmpty(txtUserId.Text))
-            {
-                MessageBox.Show("Request you to select user from Added User list", "Error");
-            }
-            else
-            {
-                string userName = "";
-
-                lock (dicUserLock)
-                {
-                    userName = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].name;
-                }
-                //Add the user in the device
-                Cursor = Cursors.WaitCursor;
-                axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);
-
-                Boolean userAdded = axCZKEM1.SSR_SetUserInfo(DS.DS.lstDevices[0].id, txtUserId.Text,
-                                             userName, "", 0, true);
-                if(!userAdded)
-                {
-                    int errorCode = -1;
-                    axCZKEM1.GetLastError(ref errorCode);
-                    MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
-                                    "Request you to take necessary steps and try in sometime.", "Error");
-                }
-                axCZKEM1.RefreshData(DS.DS.lstDevices[0].id);//the data in the device should be refreshed
-                axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, true);
-                Cursor = Cursors.Default;
-
-                //This is return below, so that in case of user added we free the device first.
-                //and then hit API and all stuff.
-                if (userAdded)
-                {
-                    MessageBox.Show("Access has been granted to user successfully", "Success");
-                    lock (dicUserLock)
-                    {
-                        //Enable status of user 
-                        DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].inDevice = 1;
-
-                        //Update user in the database
-                        DS.User user = new DS.User();
-                        lock (dicUserLock)
-                        {
-                            user = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)];
-                        }
-                        APILayer.UpdateUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.id, userName: user.name, userType: user.type,
-                                                inDevice: user.inDevice, expiryDt: user.expiryDt, dt: user.date, enabled: user.enabled);
-                    }
-
-                    //Add the user in the userList
-                    BindUsersGridView();
-                }
-
-                //Reset textboax field
-                txtUserId.Clear();
-            }
-        }
-
-        private void btnRemoveAccess_Click(object sender, EventArgs e)
-        {
-            Boolean userDeleted = false;
-            if (DS.DS.lstDevices[0].status == Common.deviceDisconnected)
-            {
-                MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
-                return;
-            }
             if (String.IsNullOrEmpty(txtUserId.Text))
             {
                 MessageBox.Show("Request you to select user from Added User list", "Error");
             }
             else
             {
-                Cursor = Cursors.WaitCursor;
-                axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);//disable the device
-                userDeleted = axCZKEM1.SSR_DeleteEnrollData(DS.DS.lstDevices[0].id, txtUserId.Text, 12);
-
-                if (!userDeleted)
+                bool accessAddedInAtleastOneDevice = false;
+                foreach (DS.Device device in DS.DS.lstDevices)
                 {
-                    int errorCode = -1;
-                    axCZKEM1.GetLastError(ref errorCode);
-                    MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
-                                    "Request you to take necessary steps and try in sometime.", "Error");
-                }
-                axCZKEM1.RefreshData(DS.DS.lstDevices[0].id);//the data in the device should be refreshed
-                axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, true);//enable the device
-                Cursor = Cursors.Default;
+                    if (device.status == Common.deviceDisconnected)
+                    {
+                        MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
+                        break;
+                    }
 
-                if (userDeleted)
-                {
-                    MessageBox.Show("User access has been removed successfully.", "Success");
+                    string userName = "";
 
                     lock (dicUserLock)
                     {
-                        DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].inDevice = 0;
-
-                        //Update user in the database
-                        DS.User user = new DS.User();
-                        lock (dicUserLock)
-                        {
-                            user = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)];
-                        }
-
-                        //Bind Users Gridview
-                        BindUsersGridView();
-
-                        APILayer.UpdateUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.id, userName: user.name, userType: user.type,
-                                                inDevice: user.inDevice, expiryDt: user.expiryDt, dt: user.date, enabled: user.enabled);
-
+                        userName = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].name;
                     }
+                    //Add the user in the device
+                    Cursor = Cursors.WaitCursor;
+                    axCZKEM1.EnableDevice(device.id, false);
+
+                    Boolean userAdded = false;
+                    byte userDetailsExistInDevice = 0;
+                    lock (dicUserLock)
+                    {
+                        //check status of user 
+                        userDetailsExistInDevice = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].inDevice;
+                    }
+                    if (userDetailsExistInDevice == 1)
+                    {
+                        userAdded = axCZKEM1.SSR_EnableUser(device.id, txtUserId.Text, true);
+                    }
+                    else
+                    {
+                        userAdded = axCZKEM1.SSR_SetUserInfo(device.id, txtUserId.Text,
+                                                             userName, "", 0, true);
+                    }
+                    if (!userAdded)
+                    {
+                        int errorCode = -1;
+                        axCZKEM1.GetLastError(ref errorCode);
+
+                        //MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
+                        //              "Request you to take necessary steps and try in sometime.", "Error");
+                        accessAddedInAtleastOneDevice = false;
+                    }
+                    else
+                    {
+                        accessAddedInAtleastOneDevice = true;
+                    }
+                    axCZKEM1.RefreshData(device.id);//the data in the device should be refreshed
+                    axCZKEM1.EnableDevice(device.id, true);
+                    Cursor = Cursors.Default;
+
                 }
+
+                //This is return below, so that in case of user added we free the device first.
+                //and then hit API and all stuff.
+                if (accessAddedInAtleastOneDevice)
+                {
+                    lock (dicUserLock)
+                    {
+                        //Enable status of user 
+                        DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].inDevice = 1;
+                        DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].enabled = 1;
+                    }
+
+                    //Update user in the database
+                    DS.User user = new DS.User();
+                    lock (dicUserLock)
+                    {
+                        user = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)];
+                    }
+                    APILayer.UpdateUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.id, userName: user.name, userType: user.type,
+                                            inDevice: user.inDevice, expiryDt: user.expiryDt, dt: user.date, enabled: user.enabled);
+
+
+                    MessageBox.Show("Access has been granted to user successfully in atleast one device", "Success");
+                }
+
+                //Add the user in the userList
+                BindUsersGridView();
+
+                //Reset textboax field
+                txtUserId.Clear();
+
+            }
+        }
+
+        private void btnRemoveAccess_Click(object sender, EventArgs e)
+        {
+            Boolean userDeleted = false;
+            if (String.IsNullOrEmpty(txtUserId.Text))
+            {
+                MessageBox.Show("Request you to select user from Added User list", "Error");
+            }
+            else
+            {
+                bool accessRemovedFromAllDevices = false;
+                foreach (DS.Device device in DS.DS.lstDevices)
+                {
+                    if (device.status == Common.deviceDisconnected)
+                    {
+                        MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
+                        accessRemovedFromAllDevices = false;
+                        break;
+                    }
+
+                    Cursor = Cursors.WaitCursor;
+                    axCZKEM1.EnableDevice(device.id, false);//disable the device
+                    userDeleted = axCZKEM1.SSR_DeleteEnrollData(device.id, txtUserId.Text, 12);
+
+                    if (!userDeleted)
+                    {
+                        accessRemovedFromAllDevices = false;
+                        int errorCode = -1;
+                        axCZKEM1.GetLastError(ref errorCode);
+                        MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
+                                        "Request you to take necessary steps and try in sometime.", "Error");
+                    }
+                    else
+                        accessRemovedFromAllDevices = true;
+                    axCZKEM1.RefreshData(device.id);//the data in the device should be refreshed
+                    axCZKEM1.EnableDevice(device.id, true);//enable the device
+                    Cursor = Cursors.Default;
+
+
+                }
+
+                if (accessRemovedFromAllDevices)
+                {
+                    lock (dicUserLock)
+                    {
+                        DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].inDevice = 0;
+                        DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)].enabled = 0;
+                    }
+
+                    //Update user in the database
+                    DS.User user = new DS.User();
+                    lock (dicUserLock)
+                    {
+                        user = DS.DS.dicUsers[Convert.ToInt32(txtUserId.Text)];
+                    }
+
+                    //Bind Users Gridview
+                    BindUsersGridView();
+
+                    APILayer.UpdateUserInDb(gymId: DS.DS.gymObj.gymId, userId: user.id, userName: user.name, userType: user.type,
+                                            inDevice: user.inDevice, expiryDt: user.expiryDt, dt: user.date, enabled: user.enabled);
+
+
+                    MessageBox.Show("User access has been removed successfully.", "Success");
+                }
+
+                //Add the user in the userList
+                BindUsersGridView();
 
                 txtUserId.Clear();
             }
@@ -2048,10 +2139,10 @@ namespace UserInfo
                 MessageBox.Show("User Id is not present.", "Error");
             }
         }
-        
+
         private void txtSearchUserId_TextChanged(object sender, EventArgs e)
         {
-            if(String.IsNullOrEmpty(txtSearchUserId.Text))
+            if (String.IsNullOrEmpty(txtSearchUserId.Text))
             {
                 BindUsersGridView();
             }
@@ -2104,7 +2195,7 @@ namespace UserInfo
                 gridviewUsers.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(20, 25, 72);
                 gridviewUsers.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
                 #endregion
-                
+
             }
         }
 
@@ -2136,80 +2227,85 @@ namespace UserInfo
         //The Method will be used to attendance data.
         private void btnManualSync_Click(object sender, EventArgs e)
         {
-            if (DS.DS.lstDevices[0].status == Common.deviceDisconnected)
+            foreach (DS.Device device in DS.DS.lstDevices)
             {
-                MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
-                return;
-            }
-
-            if ((System.DateTime.Now - dtLastAttendanceSync).TotalMinutes <= 5)
-            {
-                MessageBox.Show("Last Data Sync happened on " + lblDataSyncVal.Text + ". There should be a gap of 5 minutes between Data Sync", "Error");
-                return;
-            }
-
-            string sdwEnrollNumber = "";
-            int idwVerifyMode = 0;
-            int idwInOutMode = 0;
-            int idwYear = 0;
-            int idwMonth = 0;
-            int idwDay = 0;
-            int idwHour = 0;
-            int idwMinute = 0;
-            int idwSecond = 0;
-            int idwWorkcode = 0;
-            DateTime dt = System.DateTime.MinValue;
-
-            int idwErrorCode = 0;
-            int iGLCount = 0;
-            int iIndex = 0;
-
-            Cursor = Cursors.WaitCursor;
-           
-            axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);//disable the device
-            if (axCZKEM1.ReadGeneralLogData(DS.DS.lstDevices[0].id))//read all the attendance records to the memory
-            {
-                while (axCZKEM1.SSR_GetGeneralLogData(DS.DS.lstDevices[0].id, out sdwEnrollNumber, out idwVerifyMode,
-                           out idwInOutMode, out idwYear, out idwMonth, out idwDay, out idwHour, out idwMinute, out idwSecond, ref idwWorkcode))//get records from the memory
+                if (device.status == Common.deviceDisconnected)
                 {
-                    iGLCount++;
-
-                    //Store the real time attendance infor in the list
-                    DS.AttendanceInfo attendanceInfo = new DS.AttendanceInfo();
-                    attendanceInfo.uid = Convert.ToInt32(sdwEnrollNumber);
-                    attendanceInfo.time = idwYear.ToString() + "-" + idwMonth.ToString() + "-" + idwDay.ToString() + " " +
-                                          idwHour.ToString() + ":" + idwMinute.ToString() + ":" + idwSecond.ToString();
-                    dt = new DateTime(idwYear, idwMinute, idwDay, idwHour, idwMinute, idwSecond);
-
-                    if (dt >= dtLastAttendanceSync)
-                    {
-                        //Log attendance in List
-                        lock (listAttendanceLock)
-                        {
-                            DS.DS.lstAttendance.Add(attendanceInfo);
-                        }
-                    }
-
-                    iIndex++;
+                    MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
+                    return;
                 }
-            }
-            else
-            {
-                Cursor = Cursors.Default;
-                axCZKEM1.GetLastError(ref idwErrorCode);
 
-                if (idwErrorCode != 0)
+                if ((System.DateTime.Now - dtLastAttendanceSync).TotalMinutes <= 5)
                 {
-                    MessageBox.Show("Error Message: " + Common.GetErrorMessages(idwErrorCode) + "." + Environment.NewLine +
-                                    "Request you to take necessary steps and try in sometime.", "Error");
+                    MessageBox.Show("Last Data Sync happened on " + lblDataSyncVal.Text + ". There should be a gap of 5 minutes between Data Sync", "Error");
+                    return;
+                }
+
+                string sdwEnrollNumber = "";
+                int idwVerifyMode = 0;
+                int idwInOutMode = 0;
+                int idwYear = 0;
+                int idwMonth = 0;
+                int idwDay = 0;
+                int idwHour = 0;
+                int idwMinute = 0;
+                int idwSecond = 0;
+                int idwWorkcode = 0;
+                DateTime dt = System.DateTime.MinValue;
+
+                int idwErrorCode = 0;
+                int iGLCount = 0;
+                int iIndex = 0;
+
+
+
+                Cursor = Cursors.WaitCursor;
+                axCZKEM1.EnableDevice(device.id, false);//disable the device
+                if (axCZKEM1.ReadGeneralLogData(device.id))//read all the attendance records to the memory
+                {
+                    while (axCZKEM1.SSR_GetGeneralLogData(device.id, out sdwEnrollNumber, out idwVerifyMode,
+                               out idwInOutMode, out idwYear, out idwMonth, out idwDay, out idwHour, out idwMinute, out idwSecond, ref idwWorkcode))//get records from the memory
+                    {
+                        iGLCount++;
+
+                        //Store the real time attendance infor in the list
+                        DS.AttendanceInfo attendanceInfo = new DS.AttendanceInfo();
+                        attendanceInfo.uid = Convert.ToInt32(sdwEnrollNumber);
+                        attendanceInfo.time = idwYear.ToString() + "-" + idwMonth.ToString() + "-" + idwDay.ToString() + " " +
+                                              idwHour.ToString() + ":" + idwMinute.ToString() + ":" + idwSecond.ToString();
+                        dt = new DateTime(idwYear, idwMinute, idwDay, idwHour, idwMinute, idwSecond);
+
+                        if (dt >= dtLastAttendanceSync)
+                        {
+                            //Log attendance in List
+                            lock (listAttendanceLock)
+                            {
+                                DS.DS.lstAttendance.Add(attendanceInfo);
+                            }
+                        }
+
+                        iIndex++;
+                    }
                 }
                 else
                 {
-                    MessageBox.Show("Device has not returned any data", "Error");
+                    Cursor = Cursors.Default;
+                    axCZKEM1.GetLastError(ref idwErrorCode);
+
+                    if (idwErrorCode != 0)
+                    {
+                        MessageBox.Show("Error Message: " + Common.GetErrorMessages(idwErrorCode) + "." + Environment.NewLine +
+                                        "Request you to take necessary steps and try in sometime.", "Error");
+                    }
+                    else
+                    {
+                        MessageBox.Show("Device has not returned any data", "Error");
+                    }
                 }
+                axCZKEM1.EnableDevice(device.id, true);//enable the device
+                Cursor = Cursors.Default;
             }
-            axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, true);//enable the device
-            Cursor = Cursors.Default;
+
 
             MessageBox.Show("Attendance Details synced successfully. Wait for 5 minutes to get it reflected.", "Success");
         }
@@ -2219,38 +2315,41 @@ namespace UserInfo
         {
             try
             {
-                if (DS.DS.lstDevices[0].status == Common.deviceDisconnected)
+                foreach (DS.Device device in DS.DS.lstDevices)
                 {
-                    MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
-                    return;
+                    if (device.status == Common.deviceDisconnected)
+                    {
+                        MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
+                        break;
+                    }
+                    int errorCode = 0;
+
+                    //Clear attendance details from LIstview.
+                    lvAttendanceDetails.Items.Clear();
+
+                    axCZKEM1.EnableDevice(device.id, false);//disable the device
+                    if (axCZKEM1.ClearGLog(device.id))
+                    {
+                        axCZKEM1.RefreshData(device.id);//the data in the device should be refreshed
+                        MessageBox.Show("All attendance logs have cleared from device.", "Success");
+                    }
+                    else
+                    {
+                        axCZKEM1.GetLastError(ref errorCode);
+                        MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
+                                         "Request you to take necessary steps and try in sometime.", "Error");
+                    }
+                    axCZKEM1.EnableDevice(iMachineNumber, true);//enable the device
                 }
-                int errorCode = 0;
-               
-                //Clear attendance details from LIstview.
-                lvAttendanceDetails.Items.Clear();
-                
-                axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);//disable the device
-                if (axCZKEM1.ClearGLog(DS.DS.lstDevices[0].id))
-                {
-                    axCZKEM1.RefreshData(DS.DS.lstDevices[0].id);//the data in the device should be refreshed
-                    MessageBox.Show("All attendance logs have cleared from device.", "Success");
-                }
-                else
-                {
-                    axCZKEM1.GetLastError(ref errorCode);
-                    MessageBox.Show("Error Message: " + Common.GetErrorMessages(errorCode) + "." + Environment.NewLine +
-                                     "Request you to take necessary steps and try in sometime.", "Error");
-                }
-                axCZKEM1.EnableDevice(iMachineNumber, true);//enable the device
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
 
             }
         }
 
         //If your card passes the verification,this event will be triggered
-        private void axCZKEM1_OnAttTransactionEx(string sEnrollNumber, int iIsInValid, int iAttState, int iVerifyMethod, int iYear, 
+        private void axCZKEM1_OnAttTransactionEx(string sEnrollNumber, int iIsInValid, int iAttState, int iVerifyMethod, int iYear,
                                                  int iMonth, int iDay, int iHour, int iMinute, int iSecond, int iWorkCode)
         {
             //Store the real time attendance infor in the list
@@ -2319,8 +2418,31 @@ namespace UserInfo
         }
 
 
+
         #endregion
 
-        
+        private void btnEnrollUser_Click(object sender, EventArgs e)
+        {
+            Boolean userDeleted = false;
+            if (String.IsNullOrEmpty(txtUserId.Text))
+            {
+                MessageBox.Show("Request you to select user from Added User list", "Error");
+            }
+            else
+            {
+                if (DS.DS.lstDevices[0].status == Common.deviceDisconnected)
+                {
+                    MessageBox.Show(Common.deviceConnectionErrorMsg, "Error");
+                }
+
+                Cursor = Cursors.WaitCursor;
+                axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, false);//disable the device
+                axCZKEM1.StartEnroll(Convert.ToInt32(txtUserId.Text), 0);
+                axCZKEM1.EnableDevice(DS.DS.lstDevices[0].id, true);//enable the device
+                Cursor = Cursors.Default;
+
+                txtUserId.Clear();
+            }
+        }
     }
 }

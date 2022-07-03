@@ -194,6 +194,7 @@ namespace UserInfo
             this.lblExpiryDateKey = new System.Windows.Forms.Label();
             this.lblGymName = new System.Windows.Forms.Label();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
+            this.btnEnrollUser = new System.Windows.Forms.Button();
             rtTimer = new System.Windows.Forms.Timer(this.components);
             this.Body.SuspendLayout();
             this.tab.SuspendLayout();
@@ -547,6 +548,7 @@ namespace UserInfo
             // 
             // tabUsers
             // 
+            this.tabUsers.Controls.Add(this.btnEnrollUser);
             this.tabUsers.Controls.Add(this.txtSearchUserId);
             this.tabUsers.Controls.Add(this.lblSerachUserId);
             this.tabUsers.Controls.Add(this.pictureBoxClearUserId);
@@ -1888,6 +1890,20 @@ namespace UserInfo
             this.pictureBox1.TabIndex = 75;
             this.pictureBox1.TabStop = false;
             // 
+            // btnEnrollUser
+            // 
+            this.btnEnrollUser.BackColor = System.Drawing.Color.DarkTurquoise;
+            this.btnEnrollUser.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.btnEnrollUser.ForeColor = System.Drawing.Color.White;
+            this.btnEnrollUser.Location = new System.Drawing.Point(798, 29);
+            this.btnEnrollUser.Margin = new System.Windows.Forms.Padding(5);
+            this.btnEnrollUser.Name = "btnEnrollUser";
+            this.btnEnrollUser.Size = new System.Drawing.Size(140, 40);
+            this.btnEnrollUser.TabIndex = 24;
+            this.btnEnrollUser.Text = "Enroll User";
+            this.btnEnrollUser.UseVisualStyleBackColor = false;
+            this.btnEnrollUser.Click += new System.EventHandler(this.btnEnrollUser_Click);
+            // 
             // TFT
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -2107,5 +2123,6 @@ namespace UserInfo
         private System.Windows.Forms.PictureBox pictureBoxClearUserId;
         private System.Windows.Forms.TextBox txtSearchUserId;
         private System.Windows.Forms.Label lblSerachUserId;
+        private System.Windows.Forms.Button btnEnrollUser;
     }
 }

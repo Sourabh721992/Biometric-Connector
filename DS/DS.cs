@@ -12,7 +12,7 @@ namespace UserInfo.DS
 
             lstDevices = new List<Device>();
 
-            dicUsers = new Dictionary<int,User>();
+            dicUsers = new Dictionary<int, User>();
 
             lstAttendance = new List<AttendanceInfo>();
         }
@@ -20,10 +20,10 @@ namespace UserInfo.DS
         public static Gym gymObj { get; set; }
 
         //The belwo object will store Device Info
-        public static List<Device> lstDevices {get; set;}
+        public static List<Device> lstDevices { get; set; }
 
         //The below object will store user details
-        public static Dictionary<int,User> dicUsers { get; set; }
+        public static Dictionary<int, User> dicUsers { get; set; }
 
         //The below object will store attendance info of user.
         public static List<AttendanceInfo> lstAttendance { get; set; }
@@ -35,7 +35,7 @@ namespace UserInfo.DS
         public string subscriptionDt { get; set; }
         public string expiryDt { get; set; }
         public string gymName { get; set; }
-        
+        public int biometricId { get; set; }
     }
 
     class Device
@@ -53,7 +53,7 @@ namespace UserInfo.DS
     {
         public int id { get; set; }
         public byte enabled { get; set; }
-        public string name { get; set; }    
+        public string name { get; set; }
         public string type { get; set; }
         public byte inDevice { get; set; }
         public string expiryDt { get; set; }

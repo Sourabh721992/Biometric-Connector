@@ -25,13 +25,14 @@ namespace UserInfo.Class
                     resMsg = "Request you to enter License Key";
                     return false;
                 }
-                else {
+                else
+                {
                     string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/validateLicenseKey",
-                                                               strData: "license_key=" +strLicenceKey,
+                                                               strData: "license_key=" + strLicenceKey,
                                                                contentType: "application/x-www-form-urlencoded",
                                                                isPostMethod: true);
 
-                    Dictionary<string, object> resObj = JsonConvert.DeserializeObject<Dictionary<string,object>>(response);
+                    Dictionary<string, object> resObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);
 
                     //Setting the response message.
                     resMsg = Convert.ToString(resObj["message"]);
@@ -40,19 +41,24 @@ namespace UserInfo.Class
                     //The below condition says the license is valid
                     if (Convert.ToInt16(resObj["flag"]) == 1)
                     {
-                        foreach(var gym in ((Newtonsoft.Json.Linq.JObject)resObj["data"]))
+                        foreach (var gym in ((Newtonsoft.Json.Linq.JObject)resObj["data"]))
                         {
-                            switch(gym.Key)
+                            switch (gym.Key)
                             {
-                                case "id": DS.DS.gymObj.gymId = Convert.ToInt32(gym.Value);
+                                case "id":
+                                    DS.DS.gymObj.gymId = Convert.ToInt32(gym.Value);
                                     break;
-                                case "name": DS.DS.gymObj.gymName = Convert.ToString(gym.Value);
+                                case "name":
+                                    DS.DS.gymObj.gymName = Convert.ToString(gym.Value);
                                     break;
-                                case "subscription_date" : 
+                                case "subscription_date":
                                     DS.DS.gymObj.subscriptionDt = Convert.ToString(gym.Value);
                                     break;
                                 case "expiry_date":
                                     DS.DS.gymObj.expiryDt = Convert.ToString(gym.Value);
+                                    break;
+                                case "gym_biometric_id":
+                                    DS.DS.gymObj.biometricId = Convert.ToInt32(gym.Value);
                                     break;
                             }
                         }
@@ -65,7 +71,7 @@ namespace UserInfo.Class
                     }
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 resMsg = "In ValidateLicenseKey: " + ex.Message;
                 return false;
@@ -77,8 +83,12 @@ namespace UserInfo.Class
         {
             try
             {
+                string requestBody = "unique_id=" + DS.DS.gymObj.gymId.ToString() +
+                                      "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
+
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/getDevices",
-                                                                   strData: "unique_id=" + DS.DS.gymObj.gymId.ToString(),
+                                                                   //strData: "unique_id=" + DS.DS.gymObj.gymId.ToString(),
+                                                                   strData: requestBody,
                                                                    contentType: "application/x-www-form-urlencoded",
                                                                    isPostMethod: true);
 
@@ -88,26 +98,32 @@ namespace UserInfo.Class
                 {
                     foreach (var gym in ((Newtonsoft.Json.Linq.JObject)resObj["data"]))
                     {
-                        if(gym.Key == "devices")
+                        if (gym.Key == "devices")
                         {
-                            foreach(var device in (gym.Value))
+                            foreach (var device in (gym.Value))
                             {
                                 DS.Device deviceObj = new DS.Device();
                                 foreach (var deviceData in ((Newtonsoft.Json.Linq.JObject)device))
                                 {
-                                    switch(deviceData.Key)
+                                    switch (deviceData.Key)
                                     {
-                                        case "device_id": deviceObj.id = Convert.ToInt32(deviceData.Value);
+                                        case "device_id":
+                                            deviceObj.id = Convert.ToInt32(deviceData.Value);
                                             break;
-                                        case "device_name": deviceObj.name = Convert.ToString(deviceData.Value);
+                                        case "device_name":
+                                            deviceObj.name = Convert.ToString(deviceData.Value);
                                             break;
-                                        case "device_model": deviceObj.model = Convert.ToString(deviceData.Value);
+                                        case "device_model":
+                                            deviceObj.model = Convert.ToString(deviceData.Value);
                                             break;
-                                        case "ip": deviceObj.ip = Convert.ToString(deviceData.Value);
+                                        case "ip":
+                                            deviceObj.ip = Convert.ToString(deviceData.Value);
                                             break;
-                                        case "port": deviceObj.port = Convert.ToInt32(deviceData.Value);
+                                        case "port":
+                                            deviceObj.port = Convert.ToInt32(deviceData.Value);
                                             break;
-                                        case "date": deviceObj.date = Convert.ToString(deviceData.Value);
+                                        case "date":
+                                            deviceObj.date = Convert.ToString(deviceData.Value);
                                             break;
                                     }
                                 }
@@ -134,7 +150,7 @@ namespace UserInfo.Class
                 }
                 return true;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 resMsg = "In GetAddedDevices: " + Common.errorMsg;
                 return false;
@@ -143,7 +159,7 @@ namespace UserInfo.Class
         }
 
         //The below function will be used to add new device for the gym
-        public static Boolean AddNewDevices(out string resMsg, int gymId, int deviceId, string deviceName, 
+        public static Boolean AddNewDevices(out string resMsg, out int serverDeviceId, int gymId, int deviceId, string deviceName,
                                             string deviceModel, string ip, string port, string date)
         {
             try
@@ -154,7 +170,8 @@ namespace UserInfo.Class
                                       "&device_model=" + deviceModel +
                                       "&ip=" + ip +
                                       "&port=" + port +
-                                      "&date=" + date;
+                                      "&date=" + date +
+                                      "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
 
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/saveDeviceData",
                                                                strData: requestBody,
@@ -165,6 +182,7 @@ namespace UserInfo.Class
 
                 //Setting the response message.
                 resMsg = Convert.ToString(resObj["message"]);
+                serverDeviceId = Convert.ToInt32(Convert.ToString(resObj["data"]).Split('"')[9]);
                 if (Convert.ToInt32(resObj["flag"]) == 1)
                 {
                     return true;
@@ -174,9 +192,10 @@ namespace UserInfo.Class
                     return false;
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                resMsg = Common.errorMsg;
+                resMsg = Common.errorMsg + " " + ex.Message;
+                serverDeviceId = -1;
                 return false;
             }
         }
@@ -187,7 +206,8 @@ namespace UserInfo.Class
             try
             {
                 string requestBody = "unique_id=" + DS.DS.gymObj.gymId.ToString() +
-                                      "&device_id=" + deviceId.ToString();
+                                      "&device_id=" + deviceId.ToString() +
+                                      "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
 
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/deleteDevice",
                                                                strData: requestBody,
@@ -207,7 +227,7 @@ namespace UserInfo.Class
                     return false;
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 resMsg = Common.errorMsg;
                 return false;
@@ -226,7 +246,8 @@ namespace UserInfo.Class
                                       "&device_model=" + deviceModel +
                                       "&ip=" + ip +
                                       "&port=" + port +
-                                      "&date=" + date;
+                                      "&date=" + date +
+                                      "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
 
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/updateDevice",
                                                                strData: requestBody,
@@ -258,7 +279,8 @@ namespace UserInfo.Class
         {
             try
             {
-                string requestBody = "unique_id=" + userId.ToString();
+                string requestBody = "unique_id=" + userId.ToString() +
+                                     "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
 
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/validateUser",
                                                                strData: requestBody,
@@ -269,6 +291,7 @@ namespace UserInfo.Class
 
                 //Setting the response message.
                 resMsg = Convert.ToString(resObj["message"]);
+
                 if (Convert.ToInt32(resObj["flag"]) == 1)
                 {
                     DS.User user = new DS.User();
@@ -297,12 +320,12 @@ namespace UserInfo.Class
 
                     lock (dicUserLock)
                     {
-                        if(DS.DS.dicUsers.ContainsKey(user.id))
+                        if (DS.DS.dicUsers.ContainsKey(user.id))
                         {
                             //Update the user
                             DS.DS.dicUsers[user.id] = user;
                         }
-                        else 
+                        else
                             DS.DS.dicUsers.Add(user.id, user);
                     }
                     return true;
@@ -321,7 +344,7 @@ namespace UserInfo.Class
         }
 
         //The function will add user in the database.
-        public static void AddUserInDb(int gymId, int userId, byte enabled, string userName, string userType, 
+        public static void AddUserInDb(int gymId, int userId, byte enabled, string userName, string userType,
                                        byte inDevice, string expiryDt, string dt)
         {
             string requestBody = "gym_id=" + gymId +
@@ -331,7 +354,8 @@ namespace UserInfo.Class
                                  "&user_type=" + userType +
                                  "&indevice=" + inDevice.ToString() +
                                  "&expiry_date=" + expiryDt +
-                                 "&date=" + dt;
+                                 "&date=" + dt +
+                                 "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
 
             string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/addBiometricUser",
                                                             strData: requestBody,
@@ -348,14 +372,14 @@ namespace UserInfo.Class
             }
             else
             {
-               // return false;
+                // return false;
             }
 
         }
 
         //Update the user Added  in DB
-       public static void UpdateUserInDb(int gymId, int userId, byte enabled, string userName, string userType,
-                                       byte inDevice, string expiryDt, string dt)
+        public static void UpdateUserInDb(int gymId, int userId, byte enabled, string userName, string userType,
+                                        byte inDevice, string expiryDt, string dt)
         {
             string requestBody = "gym_id=" + gymId +
                                  "&user_id=" + userId.ToString() +
@@ -364,7 +388,8 @@ namespace UserInfo.Class
                                  "&user_type=" + userType +
                                  "&indevice=" + inDevice.ToString() +
                                  "&expiry_date=" + expiryDt +
-                                 "&date=" + dt;
+                                 "&date=" + dt +
+                                 "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
 
             string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/updateBiometricUser",
                                                        strData: requestBody,
@@ -391,12 +416,16 @@ namespace UserInfo.Class
         {
             try
             {
+                string requestBody = "gym_id=" + DS.DS.gymObj.gymId.ToString() +
+                                      "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
+
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/getBiometricUsers",
-                                                                 strData: "gym_id=" + DS.DS.gymObj.gymId.ToString(),
+                                                                 //strData: "gym_id=" + DS.DS.gymObj.gymId.ToString(),
+                                                                 strData: requestBody,
                                                                  contentType: "application/x-www-form-urlencoded",
                                                                  isPostMethod: true);
-
                 Dictionary<string, object> resObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);
+
 
                 if (Convert.ToInt16(resObj["flag"]) == 1)
                 {
@@ -404,7 +433,7 @@ namespace UserInfo.Class
                     userResponse = JsonConvert.DeserializeObject<AddedUserResponse>(response);
 
                     //Add the added users in our DS
-                    foreach(AddedUser user in userResponse.data)
+                    foreach (AddedUser user in userResponse.data)
                     {
                         DS.User userObj = new DS.User();
                         userObj.id = user.user_id;
@@ -452,13 +481,14 @@ namespace UserInfo.Class
         public static DateTime GetCurrentDateTime()
         {
             string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/getDateTime",
-                                                       strData: "",
+                                                       //strData: "",
+                                                       strData: "gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString(),
                                                        contentType: "application/x-www-form-urlencoded",
                                                        isPostMethod: true);
 
             Dictionary<string, object> resObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);
 
-            if(Convert.ToInt32(resObj["flag"]) == 1)
+            if (Convert.ToInt32(resObj["flag"]) == 1)
             {
                 foreach (var currentDate in ((Newtonsoft.Json.Linq.JObject)resObj["data"]))
                 {
@@ -473,8 +503,12 @@ namespace UserInfo.Class
         {
             try
             {
+                string requestBody = "gym_id=" + DS.DS.gymObj.gymId.ToString() +
+                                      "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
+
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/getSyncDate",
-                                                           strData: "gym_id=" + DS.DS.gymObj.gymId.ToString(),
+                                                           //strData: "gym_id=" + DS.DS.gymObj.gymId.ToString(),
+                                                           strData: requestBody,
                                                            contentType: "application/x-www-form-urlencoded",
                                                            isPostMethod: true);
 
@@ -489,7 +523,7 @@ namespace UserInfo.Class
                 }
                 return DateTime.MinValue;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return DateTime.MinValue;
             }
@@ -503,14 +537,15 @@ namespace UserInfo.Class
             {
                 string strbody = "unique_id=" + DS.DS.gymObj.gymId.ToString() +
                                  "&device_id=" + DS.DS.lstDevices[0].id +
-                                 "&data=" + attendanInfo;
+                                 "&data=" + attendanInfo +
+                                  "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString(); ;
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/addAttendanceLog",
                                                            strData: strbody,
                                                            contentType: "application/x-www-form-urlencoded",
                                                            isPostMethod: true);
 
                 Dictionary<string, object> resObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(response);
-                if(Convert.ToInt32(resObj["flag"]) == 1)
+                if (Convert.ToInt32(resObj["flag"]) == 1)
                 {
 
                 }
@@ -519,9 +554,9 @@ namespace UserInfo.Class
 
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                
+
             }
 
         }
@@ -532,7 +567,8 @@ namespace UserInfo.Class
             try
             {
                 string strbody = "gym_id=" + DS.DS.gymObj.gymId.ToString() +
-                                 "&attendanceSyncDate=" + dtAttendanceSyncDate.ToString("yyyy-MM-dd HH:mm:ss");
+                                 "&attendanceSyncDate=" + dtAttendanceSyncDate.ToString("yyyy-MM-dd HH:mm:ss") +
+                                  "&gym_biometric_id=" + DS.DS.gymObj.biometricId.ToString();
 
                 string response = Common.GetWebApiResponse(url: "https://app.fitcode.in/API2/saveSyncDate",
                                                            strData: strbody,
@@ -549,7 +585,7 @@ namespace UserInfo.Class
 
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
 
             }
